@@ -5,100 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control de Parámetros de Moldeo</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
-// === URL del Apps Script ===
-const API_URL = "https://script.google.com/macros/s/AKfycbx8lxHKSLEjCGizQBsn-qMys9CWE9GJA-pOSVxCrYTZFt2nKZ-0cRZMIVVBaoVSxirF/exec";
-
-// === Guardar libro en la nube ===
-function saveBookOnline(book) {
-    fetch(API_URL, {
-        method: "POST",
-        body: JSON.stringify(book),
-        headers: { "Content-Type": "application/json" }
-    })
-    .then(res => res.json())
-    .then(() => {
-        alert("Libro guardado en Google Drive");
-        showScreen('homeScreen');
-        loadSavedBooks(); // recargar lista
-    })
-    .catch(err => console.error("Error al guardar:", err));
-}
-
-// === Cargar todos los libros ===
-function loadSavedBooks() {
-    fetch(API_URL)
-        .then(res => res.json())
-        .then(books => {
-            const booksList = document.getElementById('booksList');
-
-            if (books.length === 0) {
-                booksList.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-folder-open"></i>
-                        <p>No hay libros guardados aún</p>
-                    </div>
-                `;
-                return;
-            }
-
-            booksList.innerHTML = '';
-            [...books].reverse().forEach(book => {
-                const bookElement = document.createElement('div');
-                bookElement.className = 'book-item';
-                bookElement.innerHTML = `
-                    <h4>${book.product.name}</h4>
-                    <p><strong>Máquina:</strong> ${book.product.machine}</p>
-                    <p><strong>Lote:</strong> ${book.product.lot}</p>
-                    <p><strong>Fecha:</strong> ${new Date(book.product.date).toLocaleDateString()}</p>
-                    <p><strong>Autor:</strong> ${book.product.author}</p>
-                    <p><strong>Páginas:</strong> ${book.pages.length}</p>
-                    <div class="book-actions">
-                        <button class="btn-small btn-view" onclick="viewBook(${book.id})">Ver</button>
-                        <button class="btn-small btn-download" onclick="downloadBookExcel(${book.id})">Descargar</button>
-                        <button class="btn-small btn-view" onclick="startEditBook(${book.id})"><i class="fas fa-pen"></i> Editar</button>
-                        <button class="btn-small btn-delete" onclick="deleteBook(${book.id})">Eliminar</button>
-                    </div>
-                `;
-                booksList.appendChild(bookElement);
-            });
-        })
-        .catch(err => console.error("Error al cargar libros:", err));
-}
-
-// === Eliminar libro ===
-function deleteBook(id) {
-    if (!confirm("¿Seguro que quieres eliminar este libro?")) return;
-
-    fetch(API_URL + "?id=" + id, { method: "DELETE" })
-        .then(res => res.json())
-        .then(() => {
-            alert("Libro eliminado");
-            loadSavedBooks();
-        })
-        .catch(err => console.error("Error al eliminar:", err));
-}
-
-// === Terminar creación/edición de libro ===
-function finishBookCreation() {
-    const completedPages = currentPages.filter(page => page.completed);
-
-    if (completedPages.length === 0) {
-        alert('Debe completar al menos una página antes de guardar el libro');
-        return;
-    }
-
-    const newBookData = {
-        id: editingBookId || Date.now(),
-        product: currentProduct,
-        pages: completedPages,
-        createdAt: new Date().toISOString()
-    };
-
-    saveBookOnline(newBookData);
-}
-
-</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -667,6 +574,40 @@ function finishBookCreation() {
     </div>
 
     <script>
+        // Reemplaza esta URL con la URL de tu web app de Google Apps Script
+        const SCRIPT_URL = 'https://script.google.com/home/projects/1dYnevvaVOND0NtHVEaKnqBrchLjxsdpiv3ffBQhzjUSV_7YWlCRs2K5E/edit'; // Ej: https://script.google.com/macros/s/AKfycb.../exec
+
+        // Funciones para simular localStorage con Google Drive via Apps Script
+        async function getItem(key) {
+            try {
+                const res = await fetch(`${SCRIPT_URL}?key=${key}`);
+                if (!res.ok) {
+                    console.error('Error al obtener datos:', res.status);
+                    return null;
+                }
+                return await res.text();
+            } catch (error) {
+                console.error('Error en getItem:', error);
+                return null;
+            }
+        }
+
+        async function setItem(key, value) {
+            try {
+                const obj = JSON.parse(value);
+                const res = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key, value: obj })
+                });
+                if (!res.ok) {
+                    console.error('Error al guardar datos:', res.status);
+                }
+            } catch (error) {
+                console.error('Error en setItem:', error);
+            }
+        }
+
         // Variables globales
         let currentMachine = '';
         let currentProduct = {};
@@ -677,18 +618,20 @@ function finishBookCreation() {
         let editingBookId = null; // Si no es null, estamos editando un libro existente
 
         // ====== Gestión dinámica de máquinas ======
-        function ensureDefaultMachines() {
-            const stored = JSON.parse(localStorage.getItem('machines') || '[]');
+        async function ensureDefaultMachines() {
+            const storedStr = await getItem('machines') || '[]';
+            const stored = JSON.parse(storedStr);
             if (stored.length === 0) {
                 const defaults = ['Nissei-Asb 12M', '70DPH'];
-                localStorage.setItem('machines', JSON.stringify(defaults));
+                await setItem('machines', JSON.stringify(defaults));
             }
         }
 
-        function renderMachines() {
+        async function renderMachines() {
             const list = document.getElementById('machineButtons');
             list.innerHTML = '';
-            const machines = JSON.parse(localStorage.getItem('machines') || '[]');
+            const machinesStr = await getItem('machines') || '[]';
+            const machines = JSON.parse(machinesStr);
             machines.forEach(name => {
                 const btn = document.createElement('button');
                 // Mantener el estilo original: 70DPH usa .nissei (rojo), otros usan default (azul)
@@ -710,13 +653,14 @@ function finishBookCreation() {
         function closeAddMachineModal() {
             document.getElementById('addMachineModal').style.display = 'none';
         }
-        function createMachine() {
+        async function createMachine() {
             const name = (document.getElementById('machineNameInput').value || '').trim();
             if (!name) { alert('Ingresa un nombre'); return; }
-            const machines = JSON.parse(localStorage.getItem('machines') || '[]');
+            const machinesStr = await getItem('machines') || '[]';
+            const machines = JSON.parse(machinesStr);
             if (machines.includes(name)) { alert('Esa máquina ya existe'); return; }
             machines.push(name);
-            localStorage.setItem('machines', JSON.stringify(machines));
+            await setItem('machines', JSON.stringify(machines));
             closeAddMachineModal();
             renderMachines();
         }
@@ -724,10 +668,10 @@ function finishBookCreation() {
         // ====== Fin gestión dinámica de máquinas ======
 
         // Cargar datos al inicio
-        document.addEventListener('DOMContentLoaded', function() {
-            ensureDefaultMachines();
-            renderMachines();
-            loadSavedBooks();
+        document.addEventListener('DOMContentLoaded', async function() {
+            await ensureDefaultMachines();
+            await renderMachines();
+            await loadSavedBooks();
             setupSearch();
             setCurrentDate();
             document.getElementById('btnAddMachine').addEventListener('click', openAddMachineModal);
@@ -769,11 +713,11 @@ function finishBookCreation() {
             }
         }
 
-        function goHome() {
+        async function goHome() {
             showScreen('homeScreen');
             resetCurrentData();
-            loadSavedBooks();
-            renderMachines();
+            await loadSavedBooks();
+            await renderMachines();
         }
 
         function resetCurrentData() {
@@ -998,7 +942,7 @@ function finishBookCreation() {
         }
 
         // Finalizar creación o edición del libro
-        function finishBookCreation() {
+        async function finishBookCreation() {
             const completedPages = currentPages.filter(page => page.completed);
             
             if (completedPages.length === 0) {
@@ -1013,7 +957,8 @@ function finishBookCreation() {
                 createdAt: new Date().toISOString()
             };
 
-            const savedBooks = JSON.parse(localStorage.getItem('parameterBooks') || '[]');
+            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            const savedBooks = JSON.parse(savedBooksStr);
 
             if (editingBookId) {
                 // actualizar existente
@@ -1026,7 +971,7 @@ function finishBookCreation() {
                 alert('Libro guardado exitosamente');
             }
 
-            localStorage.setItem('parameterBooks', JSON.stringify(savedBooks));
+            await setItem('parameterBooks', JSON.stringify(savedBooks));
 
             showScreen('homeScreen');
             resetCurrentData();
@@ -1042,8 +987,9 @@ function finishBookCreation() {
         }
 
         // Cargar y mostrar libros guardados
-        function loadSavedBooks() {
-            const savedBooks = JSON.parse(localStorage.getItem('parameterBooks') || '[]');
+        async function loadSavedBooks() {
+            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            const savedBooks = JSON.parse(savedBooksStr);
             const booksList = document.getElementById('booksList');
 
             if (savedBooks.length === 0) {
@@ -1080,8 +1026,9 @@ function finishBookCreation() {
         }
 
         // Ver libro guardado (tabla en pantalla, sin descargar)
-        function viewBook(bookId) {
-            const savedBooks = JSON.parse(localStorage.getItem('parameterBooks') || '[]');
+        async function viewBook(bookId) {
+            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            const savedBooks = JSON.parse(savedBooksStr);
             const book = savedBooks.find(b => b.id === bookId);
             if (!book) return;
 
@@ -1131,8 +1078,9 @@ function finishBookCreation() {
         }
 
         // Iniciar edición de un libro guardado
-        function startEditBook(bookId) {
-            const savedBooks = JSON.parse(localStorage.getItem('parameterBooks') || '[]');
+        async function startEditBook(bookId) {
+            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            const savedBooks = JSON.parse(savedBooksStr);
             const book = savedBooks.find(b => b.id === bookId);
             if (!book) return;
 
@@ -1153,18 +1101,20 @@ function finishBookCreation() {
         }
 
         // Eliminar libro
-        function deleteBook(bookId) {
+        async function deleteBook(bookId) {
             if (confirm('¿Está seguro de que desea eliminar este libro?')) {
-                const savedBooks = JSON.parse(localStorage.getItem('parameterBooks') || '[]');
+                const savedBooksStr = await getItem('parameterBooks') || '[]';
+                const savedBooks = JSON.parse(savedBooksStr);
                 const filteredBooks = savedBooks.filter(book => book.id !== bookId);
-                localStorage.setItem('parameterBooks', JSON.stringify(filteredBooks));
+                await setItem('parameterBooks', JSON.stringify(filteredBooks));
                 loadSavedBooks();
             }
         }
 
         // Descargar en Excel
-        function downloadBookExcel(bookId) {
-            const savedBooks = JSON.parse(localStorage.getItem('parameterBooks') || '[]');
+        async function downloadBookExcel(bookId) {
+            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            const savedBooks = JSON.parse(savedBooksStr);
             const book = savedBooks.find(b => b.id === bookId);
             if (!book) return;
 
@@ -1225,9 +1175,10 @@ function finishBookCreation() {
         // Búsqueda
         function setupSearch() {
             const searchInput = document.getElementById('searchInput');
-            searchInput.addEventListener('input', function() {
+            searchInput.addEventListener('input', async function() {
                 const searchTerm = this.value.toLowerCase();
-                const savedBooks = JSON.parse(localStorage.getItem('parameterBooks') || '[]');
+                const savedBooksStr = await getItem('parameterBooks') || '[]';
+                const savedBooks = JSON.parse(savedBooksStr);
                 
                 if (!searchTerm) {
                     loadSavedBooks();
