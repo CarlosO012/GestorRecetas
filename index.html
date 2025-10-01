@@ -539,30 +539,28 @@
         // Funciones para simular localStorage con Google Drive via Apps Script
         async function getItem(key) {
             try {
-                const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`);
-                if (!res.ok) {
-                    throw new Error(`Error al obtener datos: ${res.status}`);
+                    const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`, {
+                        redirect: 'follow'  // Agrega esto
+                    });
+                    if (!res.ok) {
+                        throw new Error(`Error al obtener datos: ${res.status}`);
+                    }
+                    const text = await res.text();
+                    return text === '' ? null : text;
+                } catch (error) {
+                    console.error('Error en getItem:', error);
+                    alert('Error al cargar datos. Por favor, verifica la conexión o la URL del script.');
+                    return null;
                 }
-                const text = await res.text();
-                return text === '' ? null : text;
-            } catch (error) {
-                console.error('Error en getItem:', error);
-                alert('Error al cargar datos. Por favor, verifica la conexión o la URL del script.');
-                return null;
-            }
         }
 
         async function setItem(key, value) {
             try {
-                let obj;
-                try {
-                    obj = JSON.parse(value);
-                } catch (e) {
-                    throw new Error('Valor no es un JSON válido');
-                }
+                const obj = JSON.parse(value);
                 const res = await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    redirect: 'follow',  // Agrega esto para seguir redirecciones
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // Cambia a text/plain para evitar preflight
                     body: JSON.stringify({ key, value: obj })
                 });
                 if (!res.ok) {
