@@ -181,51 +181,6 @@
             margin: 5px 0 20px 0;
         }
 
-        .page-tabs {
-            display: flex;
-            overflow-x: auto;
-            gap: 10px;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-        }
-
-        .page-tab {
-            min-width: 120px;
-            padding: 10px 15px;
-            background: #ecf0f1;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            white-space: nowrap;
-            position: relative;
-        }
-
-        .page-tab.active {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            color: white;
-        }
-
-        .page-tab.completed {
-            background: linear-gradient(135deg, #27ae60, #229954);
-            color: white;
-        }
-
-        .page-status {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #27ae60;
-            color: white;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
         .parameter-table {
             width: 100%;
             border-collapse: collapse;
@@ -437,8 +392,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1><i class="fa fa-flask"></i> Gestor De Parametros</h1>
-            <p>Parametros Para Envases Y Tapaderas</p>
+            <h1><i class="fa fa-flask"></i> Gestor de Parámetros</h1>
+            <p>Parámetros para Envases y Tapaderas</p>
         </div>
 
         <button class="back-btn" id="backBtn" style="display: none;" onclick="goBack()">
@@ -497,6 +452,10 @@
             <div class="machine-title" id="managementTitle"></div>
             
             <div id="pagesOverview"></div>
+
+            <button class="btn btn-warning" onclick="editProductInfo()" style="margin-bottom: 10px;">
+                <i class="fas fa-pen"></i> Editar Información del Producto
+            </button>
 
             <button class="btn" onclick="showAddPageModal()">
                 <i class="fas fa-plus"></i> Agregar Nueva Página
@@ -574,37 +533,44 @@
     </div>
 
     <script>
-        // Reemplaza esta URL con la URL de tu web app de Google Apps Script
-        const SCRIPT_URL = 'https://script.google.com/home/projects/1dYnevvaVOND0NtHVEaKnqBrchLjxsdpiv3ffBQhzjUSV_7YWlCRs2K5E/edit'; // Ej: https://script.google.com/macros/s/AKfycb.../exec
+        // Reemplaza esta URL con la URL de ejecución de tu web app de Google Apps Script (deployada como "Execute as: Me" y "Who has access: Anyone")
+        const SCRIPT_URL = 'https://script.google.com/macros/s/[TU_ID_AQUI]/exec'; // Ej: https://script.google.com/macros/s/AKfycb.../exec
 
         // Funciones para simular localStorage con Google Drive via Apps Script
         async function getItem(key) {
             try {
-                const res = await fetch(`${SCRIPT_URL}?key=${key}`);
+                const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`);
                 if (!res.ok) {
-                    console.error('Error al obtener datos:', res.status);
-                    return null;
+                    throw new Error(`Error al obtener datos: ${res.status}`);
                 }
-                return await res.text();
+                const text = await res.text();
+                return text === '' ? null : text;
             } catch (error) {
                 console.error('Error en getItem:', error);
+                alert('Error al cargar datos. Por favor, verifica la conexión o la URL del script.');
                 return null;
             }
         }
 
         async function setItem(key, value) {
             try {
-                const obj = JSON.parse(value);
+                let obj;
+                try {
+                    obj = JSON.parse(value);
+                } catch (e) {
+                    throw new Error('Valor no es un JSON válido');
+                }
                 const res = await fetch(SCRIPT_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key, value: obj })
                 });
                 if (!res.ok) {
-                    console.error('Error al guardar datos:', res.status);
+                    throw new Error(`Error al guardar datos: ${res.status}`);
                 }
             } catch (error) {
                 console.error('Error en setItem:', error);
+                alert('Error al guardar datos. Por favor, verifica la conexión o la URL del script.');
             }
         }
 
@@ -616,10 +582,14 @@
         let editingPageIndex = -1;
         let screenHistory = [];
         let editingBookId = null; // Si no es null, estamos editando un libro existente
+        let isEditingProduct = false; // Flag para modo edición de producto
 
         // ====== Gestión dinámica de máquinas ======
         async function ensureDefaultMachines() {
-            const storedStr = await getItem('machines') || '[]';
+            let storedStr = await getItem('machines');
+            if (storedStr === null || storedStr === '') {
+                storedStr = '[]';
+            }
             const stored = JSON.parse(storedStr);
             if (stored.length === 0) {
                 const defaults = ['Nissei-Asb 12M', '70DPH'];
@@ -630,15 +600,19 @@
         async function renderMachines() {
             const list = document.getElementById('machineButtons');
             list.innerHTML = '';
-            const machinesStr = await getItem('machines') || '[]';
+            let machinesStr = await getItem('machines');
+            if (machinesStr === null || machinesStr === '') {
+                machinesStr = '[]';
+            }
             const machines = JSON.parse(machinesStr);
             machines.forEach(name => {
                 const btn = document.createElement('button');
-                // Mantener el estilo original: 70DPH usa .nissei (rojo), otros usan default (azul)
-                btn.className = 'machine-btn' + (name.trim().toLowerCase() === '70dph' ? ' nissei' : '');
-                btn.innerHTML = (name.trim().toLowerCase() === '70dph')
+                // Aplicar clase .nissei si el nombre contiene 'nissei' (case insensitive)
+                const isNissei = name.toLowerCase().includes('nissei');
+                btn.className = 'machine-btn' + (isNissei ? ' nissei' : '');
+                btn.innerHTML = (isNissei
                     ? '<i class="fas fa-industry"></i> ' + name
-                    : '<i class="fas fa-cog"></i> ' + name;
+                    : '<i class="fas fa-cog"></i> ' + name);
                 btn.onclick = () => selectMachine(name);
                 list.appendChild(btn);
             });
@@ -652,11 +626,15 @@
         }
         function closeAddMachineModal() {
             document.getElementById('addMachineModal').style.display = 'none';
+            document.getElementById('machineNameInput').value = '';
         }
         async function createMachine() {
             const name = (document.getElementById('machineNameInput').value || '').trim();
             if (!name) { alert('Ingresa un nombre'); return; }
-            const machinesStr = await getItem('machines') || '[]';
+            let machinesStr = await getItem('machines');
+            if (machinesStr === null || machinesStr === '') {
+                machinesStr = '[]';
+            }
             const machines = JSON.parse(machinesStr);
             if (machines.includes(name)) { alert('Esa máquina ya existe'); return; }
             machines.push(name);
@@ -727,11 +705,13 @@
             currentPageIndex = -1;
             editingPageIndex = -1;
             editingBookId = null;
+            isEditingProduct = false;
             document.getElementById('selectedMachineTitle').textContent = '';
             document.getElementById('managementTitle').textContent = '';
             document.getElementById('parametersTitle').textContent = '';
             document.getElementById('pagesOverview').innerHTML = '';
             document.getElementById('parametersBody').innerHTML = '';
+            clearProductForm();
         }
 
         // Selección de máquina
@@ -762,7 +742,23 @@
             };
 
             document.getElementById('managementTitle').textContent = `${currentMachine} - ${productName}`;
-            showPagesManagement();
+            if (isEditingProduct) {
+                isEditingProduct = false;
+                showPagesManagement();
+            } else {
+                showPagesManagement();
+            }
+        }
+
+        // Nueva función para editar info del producto
+        function editProductInfo() {
+            isEditingProduct = true;
+            document.getElementById('productName').value = currentProduct.name;
+            document.getElementById('productDate').value = currentProduct.date;
+            document.getElementById('productLot').value = currentProduct.lot;
+            document.getElementById('productAuthor').value = currentProduct.author;
+            document.getElementById('selectedMachineTitle').textContent = currentMachine;
+            showScreen('productScreen');
         }
 
         // Mostrar gestión de páginas
@@ -815,6 +811,7 @@
         // Modal de nueva página
         function showAddPageModal() {
             document.getElementById('addPageModal').style.display = 'flex';
+            document.getElementById('pageTitle').value = '';
             document.getElementById('pageTitle').focus();
         }
 
@@ -884,7 +881,7 @@
                     <select class="magnitude-select">
                         <option value="grados" ${magnitude === 'grados' ? 'selected' : ''}>°C</option>
                         <option value="presion" ${magnitude === 'presion' ? 'selected' : ''}>Bar</option>
-                        <option value="presionMpa" ${magnitude === 'presionMpa' ? 'selected' : ''}>Mpa</option>
+                        <option value="presionMpa" ${magnitude === 'presionMpa' ? 'selected' : ''}>MPa</option>
                         <option value="velocidad" ${magnitude === 'velocidad' ? 'selected' : ''}>mm/s</option>
                         <option value="distancia" ${magnitude === 'distancia' ? 'selected' : ''}>mm</option>
                         <option value="fuerza" ${magnitude === 'fuerza' ? 'selected' : ''}>kN</option>
@@ -910,16 +907,30 @@
             const rows = tbody.querySelectorAll('tr');
             const parameters = [];
 
+            let hasInvalid = false;
             rows.forEach(row => {
                 const inputs = row.querySelectorAll('input, select');
                 const name = inputs[0].value.trim();
                 const value = inputs[1].value.trim();
                 const magnitude = inputs[2].value;
 
-                if (name && value) {
+                if (name || value) { // Si al menos uno está lleno, validar ambos
+                    if (!name || !value) {
+                        hasInvalid = true;
+                        return;
+                    }
+                    if (isNaN(parseFloat(value))) {
+                        hasInvalid = true;
+                        return;
+                    }
                     parameters.push({ name, value, magnitude });
                 }
             });
+
+            if (hasInvalid) {
+                alert('Por favor, complete nombres y valores válidos (numéricos) para todos los parámetros ingresados.');
+                return;
+            }
 
             if (parameters.length === 0) {
                 alert('Por favor, agregue al menos un parámetro antes de guardar la página');
@@ -951,13 +962,16 @@
             }
 
             const newBookData = {
-                id: editingBookId || Date.now(),
+                id: editingBookId || Date.now() + Math.random().toString(36).substring(2), // Mejor ID para evitar colisiones
                 product: currentProduct,
                 pages: completedPages,
                 createdAt: new Date().toISOString()
             };
 
-            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            let savedBooksStr = await getItem('parameterBooks');
+            if (savedBooksStr === null || savedBooksStr === '') {
+                savedBooksStr = '[]';
+            }
             const savedBooks = JSON.parse(savedBooksStr);
 
             if (editingBookId) {
@@ -975,8 +989,6 @@
 
             showScreen('homeScreen');
             resetCurrentData();
-            loadSavedBooks();
-            clearProductForm();
         }
 
         function clearProductForm() {
@@ -988,7 +1000,10 @@
 
         // Cargar y mostrar libros guardados
         async function loadSavedBooks() {
-            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            let savedBooksStr = await getItem('parameterBooks');
+            if (savedBooksStr === null || savedBooksStr === '') {
+                savedBooksStr = '[]';
+            }
             const savedBooks = JSON.parse(savedBooksStr);
             const booksList = document.getElementById('booksList');
 
@@ -1004,39 +1019,52 @@
 
             booksList.innerHTML = '';
             // Mostrar los más recientes primero sin modificar el array original
-            [...savedBooks].reverse().forEach(book => {
+            [...savedBooks].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).forEach(book => {
                 const bookElement = document.createElement('div');
                 bookElement.className = 'book-item';
                 bookElement.innerHTML = `
-                    <h4>${book.product.name}</h4>
-                    <p><strong>Máquina:</strong> ${book.product.machine}</p>
-                    <p><strong>Lote:</strong> ${book.product.lot}</p>
+                    <h4>${escapeHtml(book.product.name)}</h4>
+                    <p><strong>Máquina:</strong> ${escapeHtml(book.product.machine)}</p>
+                    <p><strong>Lote:</strong> ${escapeHtml(book.product.lot)}</p>
                     <p><strong>Fecha:</strong> ${new Date(book.product.date).toLocaleDateString()}</p>
-                    <p><strong>Autor:</strong> ${book.product.author}</p>
+                    <p><strong>Autor:</strong> ${escapeHtml(book.product.author)}</p>
                     <p><strong>Páginas:</strong> ${book.pages.length}</p>
                     <div class="book-actions">
-                        <button class="btn-small btn-view" onclick="viewBook(${book.id})">Ver</button>
-                        <button class="btn-small btn-download" onclick="downloadBookExcel(${book.id})">Descargar</button>
-                        <button class="btn-small btn-view" onclick="startEditBook(${book.id})"><i class="fas fa-pen"></i> Editar</button>
-                        <button class="btn-small btn-delete" onclick="deleteBook(${book.id})">Eliminar</button>
+                        <button class="btn-small btn-view" onclick="viewBook('${book.id}')">Ver</button>
+                        <button class="btn-small btn-download" onclick="downloadBookExcel('${book.id}')">Descargar</button>
+                        <button class="btn-small btn-view" onclick="startEditBook('${book.id}')"><i class="fas fa-pen"></i> Editar</button>
+                        <button class="btn-small btn-delete" onclick="deleteBook('${book.id}')">Eliminar</button>
                     </div>
                 `;
                 booksList.appendChild(bookElement);
             });
         }
 
+        // Función para escapar HTML y prevenir XSS
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
         // Ver libro guardado (tabla en pantalla, sin descargar)
         async function viewBook(bookId) {
-            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            let savedBooksStr = await getItem('parameterBooks');
+            if (savedBooksStr === null || savedBooksStr === '') {
+                savedBooksStr = '[]';
+            }
             const savedBooks = JSON.parse(savedBooksStr);
             const book = savedBooks.find(b => b.id === bookId);
             if (!book) return;
 
-            document.getElementById('bookViewTitle').textContent = `${book.product.machine} - ${book.product.name}`;
+            document.getElementById('bookViewTitle').textContent = `${escapeHtml(book.product.machine)} - ${escapeHtml(book.product.name)}`;
             document.getElementById('bookViewInfo').innerHTML = `
-                <p><strong>Lote:</strong> ${book.product.lot}</p>
+                <p><strong>Lote:</strong> ${escapeHtml(book.product.lot)}</p>
                 <p><strong>Fecha:</strong> ${new Date(book.product.date).toLocaleDateString()}</p>
-                <p><strong>Autor:</strong> ${book.product.author}</p>
+                <p><strong>Autor:</strong> ${escapeHtml(book.product.author)}</p>
                 <p><strong>Creado:</strong> ${new Date(book.createdAt).toLocaleDateString()}</p>
             `;
 
@@ -1046,7 +1074,7 @@
                 const card = document.createElement('div');
                 card.className = 'page-summary';
                 let table = `
-                    <h4>${page.title}</h4>
+                    <h4>${escapeHtml(page.title)}</h4>
                     <table class="parameter-table">
                         <thead><tr><th>Parámetro</th><th>Valor</th><th>Magnitud</th></tr></thead>
                         <tbody>
@@ -1054,7 +1082,7 @@
                 const magnitudeText = {
                     'grados': '°C',
                     'presion': 'Bar',
-                    'presionMpa': 'Mpa',
+                    'presionMpa': 'MPa',
                     'velocidad': 'mm/s',
                     'distancia': 'mm',
                     'fuerza': 'kN',
@@ -1063,7 +1091,7 @@
                     'rpm': 'RPM'
                 };
                 page.parameters.forEach(p => {
-                    table += `<tr><td>${p.name}</td><td>${p.value}</td><td>${magnitudeText[p.magnitude] || p.magnitude}</td></tr>`;
+                    table += `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.value)}</td><td>${magnitudeText[p.magnitude] || escapeHtml(p.magnitude)}</td></tr>`;
                 });
                 table += '</tbody></table>';
                 card.innerHTML = table;
@@ -1079,7 +1107,10 @@
 
         // Iniciar edición de un libro guardado
         async function startEditBook(bookId) {
-            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            let savedBooksStr = await getItem('parameterBooks');
+            if (savedBooksStr === null || savedBooksStr === '') {
+                savedBooksStr = '[]';
+            }
             const savedBooks = JSON.parse(savedBooksStr);
             const book = savedBooks.find(b => b.id === bookId);
             if (!book) return;
@@ -1089,13 +1120,6 @@
             currentProduct = { ...book.product };
             currentPages = JSON.parse(JSON.stringify(book.pages)); // deep copy
 
-            // Ir directo a gestión de páginas con datos cargados
-            document.getElementById('selectedMachineTitle').textContent = currentMachine;
-            document.getElementById('productName').value = currentProduct.name;
-            document.getElementById('productDate').value = currentProduct.date;
-            document.getElementById('productLot').value = currentProduct.lot;
-            document.getElementById('productAuthor').value = currentProduct.author;
-
             document.getElementById('managementTitle').textContent = `${currentMachine} - ${currentProduct.name}`;
             showPagesManagement();
         }
@@ -1103,7 +1127,10 @@
         // Eliminar libro
         async function deleteBook(bookId) {
             if (confirm('¿Está seguro de que desea eliminar este libro?')) {
-                const savedBooksStr = await getItem('parameterBooks') || '[]';
+                let savedBooksStr = await getItem('parameterBooks');
+                if (savedBooksStr === null || savedBooksStr === '') {
+                    savedBooksStr = '[]';
+                }
                 const savedBooks = JSON.parse(savedBooksStr);
                 const filteredBooks = savedBooks.filter(book => book.id !== bookId);
                 await setItem('parameterBooks', JSON.stringify(filteredBooks));
@@ -1113,63 +1140,71 @@
 
         // Descargar en Excel
         async function downloadBookExcel(bookId) {
-            const savedBooksStr = await getItem('parameterBooks') || '[]';
+            let savedBooksStr = await getItem('parameterBooks');
+            if (savedBooksStr === null || savedBooksStr === '') {
+                savedBooksStr = '[]';
+            }
             const savedBooks = JSON.parse(savedBooksStr);
             const book = savedBooks.find(b => b.id === bookId);
             if (!book) return;
 
-            const wb = XLSX.utils.book_new();
+            try {
+                const wb = XLSX.utils.book_new();
 
-            // Hoja de información general
-            const infoData = [
-                ['INFORMACIÓN DEL PRODUCTO'],
-                [''],
-                ['Nombre del Producto', book.product.name],
-                ['Máquina', book.product.machine],
-                ['Lote', book.product.lot],
-                ['Fecha', new Date(book.product.date).toLocaleDateString()],
-                ['Autor', book.product.author],
-                ['Fecha de Creación', new Date(book.createdAt).toLocaleDateString()]
-            ];
-
-            const infoWs = XLSX.utils.aoa_to_sheet(infoData);
-            XLSX.utils.book_append_sheet(wb, infoWs, 'Información');
-
-            // Hoja para cada página de parámetros
-            book.pages.forEach((page, index) => {
-                const pageData = [
-                    [`PARÁMETROS - ${page.title.toUpperCase()}`],
+                // Hoja de información general
+                const infoData = [
+                    ['INFORMACIÓN DEL PRODUCTO'],
                     [''],
-                    ['Parámetro', 'Valor', 'Magnitud']
+                    ['Nombre del Producto', book.product.name],
+                    ['Máquina', book.product.machine],
+                    ['Lote', book.product.lot],
+                    ['Fecha', new Date(book.product.date).toLocaleDateString()],
+                    ['Autor', book.product.author],
+                    ['Fecha de Creación', new Date(book.createdAt).toLocaleDateString()]
                 ];
 
-                page.parameters.forEach(param => {
-                    const magnitudeText = {
-                        'grados': '°C',
-                        'presion': 'Bar',
-                        'presionMpa': 'Mpa',
-                        'velocidad': 'mm/s',
-                        'distancia': 'mm',
-                        'fuerza': 'kN',
-                        'porcentaje': '%',
-                        'tiempo': 's',
-                        'rpm': 'RPM'
-                    };
-                    
-                    pageData.push([
-                        param.name,
-                        param.value,
-                        magnitudeText[param.magnitude] || param.magnitude
-                    ]);
+                const infoWs = XLSX.utils.aoa_to_sheet(infoData);
+                XLSX.utils.book_append_sheet(wb, infoWs, 'Información');
+
+                // Hoja para cada página de parámetros
+                book.pages.forEach((page, index) => {
+                    const pageData = [
+                        [`PARÁMETROS - ${page.title.toUpperCase()}`],
+                        [''],
+                        ['Parámetro', 'Valor', 'Magnitud']
+                    ];
+
+                    page.parameters.forEach(param => {
+                        const magnitudeText = {
+                            'grados': '°C',
+                            'presion': 'Bar',
+                            'presionMpa': 'MPa',
+                            'velocidad': 'mm/s',
+                            'distancia': 'mm',
+                            'fuerza': 'kN',
+                            'porcentaje': '%',
+                            'tiempo': 's',
+                            'rpm': 'RPM'
+                        };
+                        
+                        pageData.push([
+                            param.name,
+                            param.value,
+                            magnitudeText[param.magnitude] || param.magnitude
+                        ]);
+                    });
+
+                    const pageWs = XLSX.utils.aoa_to_sheet(pageData);
+                    XLSX.utils.book_append_sheet(wb, pageWs, page.title.substring(0, 31)); // Excel limit
                 });
 
-                const pageWs = XLSX.utils.aoa_to_sheet(pageData);
-                XLSX.utils.book_append_sheet(wb, pageWs, page.title.substring(0, 31)); // Excel limit
-            });
-
-            // Descargar archivo
-            const fileName = `${book.product.name}_${book.product.machine}_${book.product.lot}.xlsx`;
-            XLSX.writeFile(wb, fileName);
+                // Descargar archivo
+                const fileName = `${book.product.name}_${book.product.machine}_${book.product.lot}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+            } catch (error) {
+                console.error('Error al generar Excel:', error);
+                alert('Error al descargar el libro. Asegúrate de que la biblioteca XLSX esté cargada correctamente.');
+            }
         }
 
         // Búsqueda
@@ -1177,7 +1212,10 @@
             const searchInput = document.getElementById('searchInput');
             searchInput.addEventListener('input', async function() {
                 const searchTerm = this.value.toLowerCase();
-                const savedBooksStr = await getItem('parameterBooks') || '[]';
+                let savedBooksStr = await getItem('parameterBooks');
+                if (savedBooksStr === null || savedBooksStr === '') {
+                    savedBooksStr = '[]';
+                }
                 const savedBooks = JSON.parse(savedBooksStr);
                 
                 if (!searchTerm) {
@@ -1205,21 +1243,21 @@
                 }
 
                 booksList.innerHTML = '';
-                [...filteredBooks].reverse().forEach(book => {
+                [...filteredBooks].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).forEach(book => {
                     const bookElement = document.createElement('div');
                     bookElement.className = 'book-item';
                     bookElement.innerHTML = `
-                        <h4>${book.product.name}</h4>
-                        <p><strong>Máquina:</strong> ${book.product.machine}</p>
-                        <p><strong>Lote:</strong> ${book.product.lot}</p>
+                        <h4>${escapeHtml(book.product.name)}</h4>
+                        <p><strong>Máquina:</strong> ${escapeHtml(book.product.machine)}</p>
+                        <p><strong>Lote:</strong> ${escapeHtml(book.product.lot)}</p>
                         <p><strong>Fecha:</strong> ${new Date(book.product.date).toLocaleDateString()}</p>
-                        <p><strong>Autor:</strong> ${book.product.author}</p>
+                        <p><strong>Autor:</strong> ${escapeHtml(book.product.author)}</p>
                         <p><strong>Páginas:</strong> ${book.pages.length}</p>
                         <div class="book-actions">
-                            <button class="btn-small btn-view" onclick="viewBook(${book.id})">Ver</button>
-                            <button class="btn-small btn-download" onclick="downloadBookExcel(${book.id})">Descargar</button>
-                            <button class="btn-small btn-view" onclick="startEditBook(${book.id})"><i class="fas fa-pen"></i> Editar</button>
-                            <button class="btn-small btn-delete" onclick="deleteBook(${book.id})">Eliminar</button>
+                            <button class="btn-small btn-view" onclick="viewBook('${book.id}')">Ver</button>
+                            <button class="btn-small btn-download" onclick="downloadBookExcel('${book.id}')">Descargar</button>
+                            <button class="btn-small btn-view" onclick="startEditBook('${book.id}')"><i class="fas fa-pen"></i> Editar</button>
+                            <button class="btn-small btn-delete" onclick="deleteBook('${book.id}')">Eliminar</button>
                         </div>
                     `;
                     booksList.appendChild(bookElement);
