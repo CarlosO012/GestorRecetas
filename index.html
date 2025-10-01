@@ -30,7 +30,38 @@ function loadSavedBooks() {
     fetch(API_URL)
         .then(res => res.json())
         .then(books => {
-            renderBooksList(books);
+            const booksList = document.getElementById('booksList');
+
+            if (books.length === 0) {
+                booksList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-folder-open"></i>
+                        <p>No hay libros guardados aún</p>
+                    </div>
+                `;
+                return;
+            }
+
+            booksList.innerHTML = '';
+            [...books].reverse().forEach(book => {
+                const bookElement = document.createElement('div');
+                bookElement.className = 'book-item';
+                bookElement.innerHTML = `
+                    <h4>${book.product.name}</h4>
+                    <p><strong>Máquina:</strong> ${book.product.machine}</p>
+                    <p><strong>Lote:</strong> ${book.product.lot}</p>
+                    <p><strong>Fecha:</strong> ${new Date(book.product.date).toLocaleDateString()}</p>
+                    <p><strong>Autor:</strong> ${book.product.author}</p>
+                    <p><strong>Páginas:</strong> ${book.pages.length}</p>
+                    <div class="book-actions">
+                        <button class="btn-small btn-view" onclick="viewBook(${book.id})">Ver</button>
+                        <button class="btn-small btn-download" onclick="downloadBookExcel(${book.id})">Descargar</button>
+                        <button class="btn-small btn-view" onclick="startEditBook(${book.id})"><i class="fas fa-pen"></i> Editar</button>
+                        <button class="btn-small btn-delete" onclick="deleteBook(${book.id})">Eliminar</button>
+                    </div>
+                `;
+                booksList.appendChild(bookElement);
+            });
         })
         .catch(err => console.error("Error al cargar libros:", err));
 }
